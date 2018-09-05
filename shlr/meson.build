@@ -620,3 +620,107 @@ ar_dep = declare_dependency(
   link_with: libr2ar,
   include_directories: ar_inc
 )
+
+
+# handle uv dependency
+uv_dep = dependency('libuv', required: false)
+if not uv_dep.found() or not get_option('use_sys_libuv')
+  uv_files_common = [
+    'uv/src/inet.c',
+    'uv/src/uv-data-getter-setters.c',
+    'uv/src/uv-common.c',
+    'uv/src/version.c',
+    'uv/src/threadpool.c',
+    'uv/src/fs-poll.c',
+    'uv/src/timer.c'
+  ]
+
+  uv_files_win = [
+    'uv/src/win/fs.c',
+    'uv/src/win/getaddrinfo.c',
+    'uv/src/win/loop-watcher.c',
+    'uv/src/win/snprintf.c',
+    'uv/src/win/signal.c',
+    'uv/src/win/poll.c',
+    'uv/src/win/dl.c',
+    'uv/src/win/req.c',
+    'uv/src/win/handle.c',
+    'uv/src/win/fs-event.c',
+    'uv/src/win/core.c',
+    'uv/src/win/winapi.c',
+    'uv/src/win/error.c',
+    'uv/src/win/async.c',
+    'uv/src/win/winsock.c',
+    'uv/src/win/stream.c',
+    'uv/src/win/util.c',
+    'uv/src/win/detect-wakeup.c',
+    'uv/src/win/thread.c',
+    'uv/src/win/tcp.c',
+    'uv/src/win/getnameinfo.c',
+    'uv/src/win/udp.c',
+    'uv/src/win/tty.c',
+    'uv/src/win/process.c',
+    'uv/src/win/process-stdio.c',
+    'uv/src/win/pipe.c'
+  ]
+
+  uv_files_unix = [
+    'uv/src/unix/async.c',
+    'uv/src/unix/atomic-ops.h',
+    'uv/src/unix/core.c',
+    'uv/src/unix/dl.c',
+    'uv/src/unix/fs.c',
+    'uv/src/unix/getaddrinfo.c',
+    'uv/src/unix/getnameinfo.c',
+    'uv/src/unix/internal.h',
+    'uv/src/unix/loop-watcher.c',
+    'uv/src/unix/loop.c',
+    'uv/src/unix/pipe.c',
+    'uv/src/unix/poll.c',
+    'uv/src/unix/process.c',
+    'uv/src/unix/signal.c',
+    'uv/src/unix/spinlock.h',
+    'uv/src/unix/stream.c',
+    'uv/src/unix/tcp.c',
+    'uv/src/unix/thread.c',
+    'uv/src/unix/tty.c',
+    'uv/src/unix/udp.c'
+  ]
+
+  uv_inc = [platform_inc, include_directories(['uv/include'])]
+
+  uv_files = uv_files_common
+  if host_machine.system() == 'windows'
+    uv_files += uv_files_win
+    uv_inc_internal = include_directories(['uv/src', 'uv/src/win'])
+  else
+    uv_files += uv_files_unix
+    uv_inc_internal = include_directories(['uv/src', 'uv/src/unix'])
+
+    if host_machine.system() == 'linux'
+      uv_files += [
+        'uv/src/unix/linux-core.c',
+        'uv/src/unix/linux-inotify.c',
+        'uv/src/unix/linux-syscalls.c',
+        'uv/src/unix/linux-syscalls.h',
+        'uv/src/unix/procfs-exepath.c',
+        'uv/src/unix/proctitle.c',
+        'uv/src/unix/sysinfo-loadavg.c',
+        'uv/src/unix/sysinfo-memory.c'
+      ]
+    endif
+  endif
+
+  libr2uv = static_library('r2uv', uv_files,
+    include_directories: [uv_inc, uv_inc_internal],
+    implicit_include_directories: false
+  )
+
+  uv_dep = declare_dependency(
+    link_with: libr2uv,
+    include_directories: [uv_inc],
+    dependencies: [pth]
+  )
+else
+  message('Use system-provided libuv library')
+endif

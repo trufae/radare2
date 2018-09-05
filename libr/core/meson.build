@@ -67,8 +67,6 @@ if host_machine.system() != 'windows'
 endif
 r_core_inc = [platform_inc, include_directories(r_core_inc)]
 
-libuv_dep = dependency('libuv')
-
 r_core = library('r_core', files,
   include_directories: r_core_inc,
   c_args: library_cflags,
@@ -99,7 +97,7 @@ r_core = library('r_core', files,
     spp_dep,
     gdb_dep,
     java_dep,
-    libuv_dep
+    uv_dep
   ],
   install: true,
   implicit_include_directories: false,

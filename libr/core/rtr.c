@@ -4,6 +4,7 @@
 #include "r_socket.h"
 #include "gdb/include/libgdbr.h"
 #include "gdb/include/gdbserver/core.h"
+#include <uv.h>
 
 #if 0
 SECURITY IMPLICATIONS
@@ -1847,8 +1848,6 @@ R_API char *r_core_rtr_cmds_query (RCore *core, const char *host, const char *po
 	return rbuf;
 }
 
-
-#include <uv.h>
 
 typedef struct rtr_cmds_context_t {
 	uv_tcp_t server;
