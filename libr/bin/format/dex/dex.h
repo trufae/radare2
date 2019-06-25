@@ -158,6 +158,31 @@ struct dex_debug_local_t {
 	ut16 endAddress;
 };
 
+/* annotation constants */
+enum {
+	kDexVisibilityBuild         = 0x00,     /* annotation visibility */
+	kDexVisibilityRuntime       = 0x01,
+	kDexVisibilitySystem        = 0x02,
+	kDexAnnotationByte          = 0x00,
+	kDexAnnotationShort         = 0x02,
+	kDexAnnotationChar          = 0x03,
+	kDexAnnotationInt           = 0x04,
+	kDexAnnotationLong          = 0x06,
+	kDexAnnotationFloat         = 0x10,
+	kDexAnnotationDouble        = 0x11,
+	kDexAnnotationString        = 0x17,
+	kDexAnnotationType          = 0x18,
+	kDexAnnotationField         = 0x19,
+	kDexAnnotationMethod        = 0x1a,
+	kDexAnnotationEnum          = 0x1b,
+	kDexAnnotationArray         = 0x1c,
+	kDexAnnotationAnnotation    = 0x1d,
+	kDexAnnotationNull          = 0x1e,
+	kDexAnnotationBoolean       = 0x1f,
+	kDexAnnotationValueTypeMask = 0x1f,     /* low 5 bits */
+	kDexAnnotationValueArgShift = 5,
+};
+
 char* r_bin_dex_get_version(struct r_bin_dex_obj_t* bin);
 void r_bin_dex_free(struct r_bin_dex_obj_t *bin);
 struct r_bin_dex_obj_t *r_bin_dex_new_buf(RBuffer *buf);

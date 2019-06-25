@@ -26,6 +26,97 @@ void r_bin_dex_free(RBinDexObj *dex) {
 	free (dex);
 }
 
+static char *getstr(RBinDexObj *bin, int idx) {
+	ut8 buf[6];
+	ut64 len;
+	int uleblen;
+	// null terminate the buf wtf
+	if (!bin || idx < 0 || idx >= bin->header.strings_size || !bin->strings) {
+		return NULL;
+	}
+	if (bin->strings[idx] >= bin->size) {
+		return NULL;
+	}
+	if (r_buf_read_at (bin->b, bin->strings[idx], buf, sizeof (buf)) < 1) {
+		return NULL;
+	}
+	r_buf_write_at (bin->b, r_buf_size (bin->b) - 1, (ut8 *)"\x00", 1);
+	uleblen = r_uleb128 (buf, sizeof (buf), &len) - buf;
+	if (!uleblen || uleblen >= bin->size) {
+		return NULL;
+	}
+	if (!len || len >= bin->size) {
+		return NULL;
+	}
+	if (bin->strings[idx] + uleblen >= bin->strings[idx] + bin->header.strings_size) {
+		return NULL;
+	}
+	ut8 *ptr = R_NEWS (ut8, len + 1);
+	if (!ptr) {
+		return NULL;
+	}
+	r_buf_read_at (bin->b, bin->strings[idx] + uleblen, ptr, len + 1);
+	ptr[len] = 0;
+	if (len != r_utf8_strlen (ptr)) {
+		// eprintf ("WARNING: Invalid string for index %d\n", idx);
+		return NULL;
+	}
+	return (char *)ptr;
+}
+
+static const char *visibility(int n) {
+	switch (n) {
+#if 0
+	case kDexVisibilityBuild:
+		return "build";
+	case kDexVisibilityRuntime:
+		return "runtime";
+	case kDexVisibilitySystem:
+		return "system";
+#endif
+	case kDexAnnotationByte:
+	case kDexAnnotationShort:
+		return "short";
+	case kDexAnnotationChar:
+		return "char";
+	case kDexAnnotationInt:
+		return "int";
+	case kDexAnnotationLong:
+		return "long";
+	case kDexAnnotationFloat:
+		return "float";
+	case kDexAnnotationDouble:
+		return "double";
+	case kDexAnnotationString:
+		return "string";
+	case kDexAnnotationType:
+		return "type";
+	case kDexAnnotationField:
+		return "field";
+	case kDexAnnotationMethod:
+		return "method";
+	case kDexAnnotationEnum:
+		return "enum";
+	case kDexAnnotationArray:
+		return "array";
+	case kDexAnnotationAnnotation:
+		return "annotation";
+	case kDexAnnotationNull:
+		return "null";
+	case kDexAnnotationBoolean:
+		return "bool";
+	}
+	return "?";
+}
+
+static const char *className (RBinDexObj *bin, int idx) {
+	DexType *dt = &bin->types[idx];
+	char *name = getstr (bin, dt->descriptor_id); // bin->classes[i].name_id);
+	return name;
+}
+
+#define FAIL(x) { eprintf(x"\n"); goto fail; }
+
 RBinDexObj *r_bin_dex_new_buf(RBuffer *buf) {
 	r_return_val_if_fail (buf, NULL);
 	RBinDexObj *bin = R_NEW0 (RBinDexObj);
@@ -221,6 +312,64 @@ RBinDexObj *r_bin_dex_new_buf(RBuffer *buf) {
 		bin->protos[i].return_type_id = r_buf_read_le32 (bin->b);
 		bin->protos[i].parameters_off = r_buf_read_le32 (bin->b);
 	}
+	eprintf ("Parse annotations\n");
+	for (i = 0; i < dexhdr->class_size; i++) {
+		ut64 at = bin->classes[i].anotations_offset;
+		if (at == UT64_MAX || at == 0LL) {
+			eprintf ("nope\n");
+			continue;
+		}
+		int j;
+		const char *cn = className (bin, bin->classes[i].class_id);
+		for (j = 0; j < 2; j++) {
+			r_buf_seek (bin->b, at, R_BUF_SET);
+			ut64 v, v2;
+			ut64 count;
+			int len = r_buf_uleb128 (bin->b, &count);
+count = len;
+			int k;
+			if (count > 0) {
+eprintf ("COUNT (%s) %lld %x\n", cn, count, len);
+				for (k = 0; k < count; k++) {
+					r_buf_uleb128 (bin->b, &v2);
+					if (v2== UT64_MAX) {
+						break;
+					}
+					const char *type = visibility (v2 & 0x1f);
+					//if (v2 == kDexAnnotationType) {
+						ut64 fo = 0; r_buf_uleb128 (bin->b, &fo);
+						char *an = getstr (bin, fo);
+						eprintf ("Few %lld %lld %s\n", fo, 0, an);
+					//}
+					eprintf ("%d %llx %s", k, v2, type);
+				}
+				eprintf ("\n");
+break;
+			} else {
+break;
+			}
+#if 0
+			ut64 k2 = r_buf_uleb128 (bin->b, &v2);
+			eprintf ("K %llx %llx\n", k, v);
+			eprintf ("V %llx %llx\n", k2, v2);
+			r_buf_seek (bin->b, at, R_BUF_SET);
+			ut32 a = r_buf_read_le32 (bin->b);
+			ut32 b = r_buf_read_le32 (bin->b);
+			if (!a && !b) {
+				break;
+			}
+			DexType *dt = &bin->types[bin->classes[i].class_id];
+			char *name = getstr (bin, dt->descriptor_id); // bin->classes[i].name_id);
+			const char *vt = visibility (a & 0x1f);
+			DexType *dt2 = &bin->types[a&0x1f];
+			const char *vt2 = getstr (bin, v2);
+			eprintf ("0x%08llx  %x %x %10s %s %s\n", at, (a >> 5), b, vt, vt2, name);
+#endif
+			at += 8;
+		}
+break;
+	}
+
 	return bin;
 fail:
 	if (bin) {
