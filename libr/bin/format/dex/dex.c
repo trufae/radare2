@@ -52,14 +52,13 @@ static char *getstr(RBinDexObj *bin, int idx) {
 		return NULL;
 	}
 	ut8 *ptr = R_NEWS (ut8, len + 1);
-	if (!ptr) {
-		return NULL;
-	}
-	r_buf_read_at (bin->b, bin->strings[idx] + uleblen, ptr, len + 1);
-	ptr[len] = 0;
-	if (len != r_utf8_strlen (ptr)) {
-		// eprintf ("WARNING: Invalid string for index %d\n", idx);
-		return NULL;
+	if (ptr) {
+		r_buf_read_at (bin->b, bin->strings[idx] + uleblen, ptr, len + 1);
+		ptr[len] = 0;
+		if (len != r_utf8_strlen (ptr)) {
+			// eprintf ("WARNING: Invalid string for index %d\n", idx);
+			return NULL;
+		}
 	}
 	return (char *)ptr;
 }
@@ -113,6 +112,117 @@ static const char *className (RBinDexObj *bin, int idx) {
 	DexType *dt = &bin->types[idx];
 	char *name = getstr (bin, dt->descriptor_id); // bin->classes[i].name_id);
 	return name;
+}
+
+static void parseValue(RBinDexObj *dex) {
+	ut8 argAndType = r_buf_read8 (dex->b);
+	int type = (argAndType & 0x1f);
+	int arg = (argAndType & 0xe0) >> 5;
+	int size = arg + 1;
+
+	switch (type) {
+	case R_DEX_ENCVAL_BYTE:
+		eprintf ("BYTE 0x%08x\n", r_buf_read8 (dex->b));
+		break;
+	case R_DEX_ENCVAL_SHORT:
+		eprintf ("SHORT\n");
+		break;
+	case R_DEX_ENCVAL_CHAR:
+		eprintf ("CHAR\n");
+		break;
+	case R_DEX_ENCVAL_INT:
+		eprintf ("INT\n");
+		break;
+	case R_DEX_ENCVAL_LONG:
+		eprintf ("LONG\n");
+		break;
+	case R_DEX_ENCVAL_FLOAT:
+		eprintf ("FLOAT\n");
+		break;
+	case R_DEX_ENCVAL_DOUBLE:
+		eprintf ("DOUBLE\n");
+		break;
+	case R_DEX_ENCVAL_STRING:
+		eprintf ("STRING\n");
+		break;
+	case R_DEX_ENCVAL_TYPE:
+		eprintf ("TYPE\n");
+		break;
+	case R_DEX_ENCVAL_FIELD:
+		eprintf ("FIELD\n");
+		break;
+	case R_DEX_ENCVAL_ENUM:
+		eprintf ("ENUM\n");
+		break;
+	case R_DEX_ENCVAL_METHOD:
+		eprintf ("METHOD\n");
+		break;
+	case R_DEX_ENCVAL_ARRAY:
+		eprintf ("ARRAY\n");
+		break;
+	case R_DEX_ENCVAL_ANNOTATION:
+		eprintf ("ANNOTATION\n");
+		break;
+	case R_DEX_ENCVAL_NULL:
+		eprintf ("NULL\n");
+		break;
+	case R_DEX_ENCVAL_BOOLEAN:
+		eprintf ("BOOLEAN\n");
+		break;
+	}
+}
+
+static void readAnnotation(RBinDexObj *dex, bool readVisibility) {
+	ut64 typeIndex, typeSize, stringIndex, i;
+	RBuffer *buf = dex->b;
+	if (readVisibility) {
+		ut8 b = r_buf_read8 (buf);
+		switch (b) {
+		case R_DEX_VISIBILITY_BUILD:
+			eprintf ("Visibility: BUILD\n");
+			break;
+		case R_DEX_VISIBILITY_RUNTIME:
+			eprintf ("Visibility: RUNTIME\n");
+			break;
+		case R_DEX_VISIBILITY_SYSTEM:
+			eprintf ("Visibility: SYSTEM\n");
+			break;
+		default:
+			eprintf ("Visibility: UNKNOWN (0x%02x)\n", b);
+			break;
+		}
+	}
+	typeIndex = -1;
+	typeSize = -1;
+	(void)r_buf_uleb128 (buf, &typeIndex);
+	(void)r_buf_uleb128 (buf, &typeSize);
+	if (typeIndex < 0 || typeSize < 0) {
+		return;
+	}
+	if (typeIndex > 10000 || typeSize > 1000) {
+		return;
+	}
+	char *typeString = getstr (dex, typeIndex);
+	eprintf ("TypeSize: %d %d (%s)\n", (int)typeIndex, (int)typeSize, typeString);
+	for (i = 0; i < typeSize; i++) {
+		r_buf_uleb128 (buf, &stringIndex);
+		const char *name = getstr (dex, stringIndex);
+		eprintf ("ITEM %d %s\n", (int)stringIndex, name);
+		parseValue (dex);
+	}
+}
+
+static void readAnnotationSet(RBinDexObj *dex, ut64 addr) {
+	r_buf_seek (dex->b, addr, R_BUF_SET);
+	ut32 i, size = r_buf_read_le32 (dex->b);
+	addr += sizeof (ut32);
+	for (i = 0; i < size; i++) {
+		r_buf_seek (dex->b, addr + (i * sizeof (ut32)), R_BUF_SET);
+		ut32 at = r_buf_read_le32 (dex->b);
+		r_buf_seek (dex->b, at, R_BUF_SET);
+		readAnnotation (dex, true);
+	}
+	r_buf_seek (dex->b, addr + (i * sizeof (ut32)), R_BUF_SET);
 }
 
 #define FAIL(x) { eprintf(x"\n"); goto fail; }
@@ -315,59 +425,58 @@ RBinDexObj *r_bin_dex_new_buf(RBuffer *buf) {
 	eprintf ("Parse annotations\n");
 	for (i = 0; i < dexhdr->class_size; i++) {
 		ut64 at = bin->classes[i].anotations_offset;
-		if (at == UT64_MAX || at == 0LL) {
-			eprintf ("nope\n");
+		if (!at || at == UT64_MAX) {
 			continue;
 		}
 		int j;
 		const char *cn = className (bin, bin->classes[i].class_id);
-		for (j = 0; j < 2; j++) {
-			r_buf_seek (bin->b, at, R_BUF_SET);
-			ut64 v, v2;
-			ut64 count;
-			int len = r_buf_uleb128 (bin->b, &count);
-count = len;
-			int k;
-			if (count > 0) {
-eprintf ("COUNT (%s) %lld %x\n", cn, count, len);
-				for (k = 0; k < count; k++) {
-					r_buf_uleb128 (bin->b, &v2);
-					if (v2== UT64_MAX) {
-						break;
-					}
-					const char *type = visibility (v2 & 0x1f);
-					//if (v2 == kDexAnnotationType) {
-						ut64 fo = 0; r_buf_uleb128 (bin->b, &fo);
-						char *an = getstr (bin, fo);
-						eprintf ("Few %lld %lld %s\n", fo, 0, an);
-					//}
-					eprintf ("%d %llx %s", k, v2, type);
-				}
-				eprintf ("\n");
-break;
-			} else {
-break;
-			}
-#if 0
-			ut64 k2 = r_buf_uleb128 (bin->b, &v2);
-			eprintf ("K %llx %llx\n", k, v);
-			eprintf ("V %llx %llx\n", k2, v2);
-			r_buf_seek (bin->b, at, R_BUF_SET);
-			ut32 a = r_buf_read_le32 (bin->b);
-			ut32 b = r_buf_read_le32 (bin->b);
-			if (!a && !b) {
-				break;
-			}
-			DexType *dt = &bin->types[bin->classes[i].class_id];
-			char *name = getstr (bin, dt->descriptor_id); // bin->classes[i].name_id);
-			const char *vt = visibility (a & 0x1f);
-			DexType *dt2 = &bin->types[a&0x1f];
-			const char *vt2 = getstr (bin, v2);
-			eprintf ("0x%08llx  %x %x %10s %s %s\n", at, (a >> 5), b, vt, vt2, name);
-#endif
-			at += 8;
+		r_buf_seek (bin->b, at, R_BUF_SET);
+		ut32 classAnnotationsOffset = r_buf_read_le32 (bin->b);
+		ut32 fieldsCount = r_buf_read_le32 (bin->b);
+		ut32 annotatedMethodsCount = r_buf_read_le32 (bin->b);
+		ut32 annotatedParametersCount = r_buf_read_le32 (bin->b);
+		eprintf ("0x%08"PFMT64x"  annotationOffset\n", at);
+		eprintf ("0x%08"PFMT64x"  classAnnotationOffset\n", (ut64)classAnnotationsOffset);
+		eprintf ("            className %s\n", cn);
+		eprintf ("            fieldsCount %d\n", fieldsCount);
+		eprintf ("            annotatedMethodCount  %d\n", annotatedMethodsCount);
+		eprintf ("            annotatedParametersCount  %d\n", annotatedParametersCount);
+
+		ut64 addr = at + (4 * sizeof (ut32));
+		if (classAnnotationsOffset > 0) {
+			ut64 cur = r_buf_seek (bin->b, 0, R_BUF_CUR);
+			readAnnotationSet (bin, classAnnotationsOffset);
+			r_buf_seek (bin->b, cur, R_BUF_SET);
 		}
-break;
+		for (j = 0; j < fieldsCount; j++) {
+			ut32 fieldId = r_buf_read_le32 (bin->b);
+			ut32 annotationsOffset = r_buf_read_le32 (bin->b);
+			ut64 cur = r_buf_seek (bin->b, 0, R_BUF_CUR);
+			eprintf ("        Annotations for fieldId %d:\n", fieldId);
+			readAnnotationSet (bin, annotationsOffset);
+			r_buf_seek (bin->b, cur, R_BUF_SET);
+		}
+		for (j = 0; j < annotatedMethodsCount ; j++) {
+			ut32 methodId = r_buf_read_le32 (bin->b);
+			ut32 annotationsOffset = r_buf_read_le32 (bin->b);
+			ut64 cur = r_buf_seek (bin->b, 0, R_BUF_CUR);
+			eprintf ("        Annotations for methodId %d:\n", methodId);
+			readAnnotationSet (bin, annotationsOffset);
+			r_buf_seek (bin->b, cur, R_BUF_SET);
+		}
+		for (j = 0; j < annotatedParametersCount ; j++) {
+			ut32 methodId = r_buf_read_le32 (bin->b);
+			ut32 annotationsOffset = r_buf_read_le32 (bin->b);
+			ut32 size = r_buf_read_le32 (bin->b);
+int k;
+			for (k = 0; k < size ; k++) {
+				ut32 paramIndex = r_buf_read_le32 (bin->b);
+				ut64 cur = r_buf_seek (bin->b, 0, R_BUF_CUR);
+				eprintf ("        Annotations for methodId %d + paramIndex:\n", methodId, paramIndex);
+				readAnnotationSet (bin, annotationsOffset);
+				r_buf_seek (bin->b, cur, R_BUF_SET);
+			}
+		}
 	}
 
 	return bin;
