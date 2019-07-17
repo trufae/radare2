@@ -219,14 +219,14 @@ static void readAnnotation(RBinDexObj *dex, bool readVisibility) {
 			break;
 		}
 	}
-	ut64 typeIndex = UT64_MAX;
-	ut64 typeSize = UT64_MAX;
+	st64 typeIndex = UT64_MAX;
+	st64 typeSize = UT64_MAX;
 	r_buf_uleb128 (buf, &typeIndex);
 	(void)r_buf_uleb128 (buf, &typeSize);
-	if (typeIndex < 0 || typeSize < 0) {
+	if (typeIndex < 0 || typeIndex > 10000) {
 		return;
 	}
-	if (typeIndex > 10000 || typeSize > 1000) {
+	if (typeSize < 0 || typeSize > 10000) {
 		return;
 	}
 	const char *typeString = className (dex, typeIndex);
