@@ -19,7 +19,7 @@ DEVDIR=sys/debian/radare2-dev/root
 rm -rf "${PKGDIR}" "${DEVDIR}"
 
 # build
-./configure --prefix=/usr > /dev/null
+./configure --prefix=/usr --without-libuv > /dev/null
 make -j4 > /dev/null
 make install DESTDIR="${PWD}/${PKGDIR}" > /dev/null
 
