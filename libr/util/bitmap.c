@@ -29,8 +29,10 @@ R_API void r_bitmap_set_bytes(RBitmap *b, const ut8 *buf, int len) {
 }
 
 R_API void r_bitmap_free(RBitmap *b) {
-	free (b->bitmap);
-	free (b);
+	if (b) {
+		free (b->bitmap);
+		free (b);
+	}
 }
 
 R_API void r_bitmap_set(RBitmap *b, size_t bit) {

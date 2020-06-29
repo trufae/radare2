@@ -1,6 +1,17 @@
-/* radare2 - LGPL - Copyright 2009-2019 pancake */
+/* radare2 - LGPL - Copyright 2009-2020 pancake */
 
 #include <r_hash.h>
+
+typedef int (*RHashDelegate)(RHash *h, const ut8 *buf, int len);
+
+RHashDelegate htable[R_HASH_NUM_INDICES] = {
+	[R_HASH_IDX_MD4]    = r_hash_do_md4,
+	[R_HASH_IDX_MD5]    = r_hash_do_md5,
+	[R_HASH_IDX_SHA1] = r_hash_do_sha1,
+	[R_HASH_IDX_SHA256] = r_hash_do_sha256,
+	[R_HASH_IDX_SHA384] = r_hash_do_sha384,
+	[R_HASH_IDX_SHA512] = r_hash_do_sha512,
+};
 
 #define HANDLE_CRC_PRESET(rbits, aname) \
 	do { \
@@ -15,6 +26,13 @@
 R_API int r_hash_calculate(RHash *ctx, ut64 algobit, const ut8 *buf, int len) {
 	if (len < 0) {
 		return 0;
+	}
+	if (algobit < R_HASH_NUM_INDICES) {
+		return -1;
+	}
+	RHashDelegate cb = htable[algobit];
+	if (cb) {
+		return cb (ctx, buf, len);
 	}
 	if (algobit & R_HASH_MD4) {
 		r_hash_do_md4 (ctx, buf, len);
@@ -86,6 +104,10 @@ R_API int r_hash_calculate(RHash *ctx, ut64 algobit, const ut8 *buf, int len) {
 		r_mem_memzero (ctx->digest, sizeof (ctx->entropy));
 		ctx->entropy = r_hash_entropy (buf, len);
 		return R_HASH_SIZE_ENTROPY;
+	}
+	if (algobit & R_HASH_GNU) {
+		*ctx->digest = r_hash_gnu (buf, len);
+		return R_HASH_SIZE_GNU;
 	}
 	if (algobit & R_HASH_XOR) {
 		*ctx->digest = r_hash_xor (buf, len);

@@ -139,6 +139,7 @@ static int do_hash_internal(RHash *ctx, ut64 hash, const ut8 *buf, int len, int 
 }
 
 static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int rad, int ule, const ut8 *compare) {
+	RBitmap *bm = r_hash_name_to_bitmap (algo);
 	ut64 j, fsize, algobit = r_hash_name_to_bits (algo);
 	RHash *ctx;
 	ut8 *buf;
@@ -232,14 +233,16 @@ static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int r
 		if (s.buf) {
 			eprintf ("Warning: Seed ignored on per-block hashing.\n");
 		}
-		for (i = 1; i < R_HASH_ALL; i <<= 1) {
-			ut64 f, t, ofrom, oto;
-			if (algobit & i) {
-				ut64 hashbit = i & algobit;
-				ofrom = from;
-				oto = to;
-				f = from;
-				t = to;
+		for (i = 1; ; i++) {
+			int foo = r_bitmap_test (bm, i);
+			if (foo == -1) {
+				break;
+			}
+			if (foo) {
+				ut64 ofrom = from;
+				ut64 oto = to;
+				ut64 f = from;
+				ut64 t = to;
 				for (j = f; j < t; j += bsize) {
 					int nsize = (j + bsize < fsize)? bsize: (fsize - j);
 					r_io_pread_at (io, j, buf, bsize);
@@ -248,13 +251,14 @@ static int do_hash(const char *file, const char *algo, RIO *io, int bsize, int r
 					if (to > fsize) {
 						to = fsize;
 					}
-					do_hash_internal (ctx, hashbit, buf, nsize, rad, 1, ule);
+					do_hash_internal (ctx, i, buf, nsize, rad, 1, ule);
 				}
-				do_hash_internal (ctx, hashbit, NULL, 0, rad, 1, ule);
+				do_hash_internal (ctx, i, NULL, 0, rad, 1, ule);
 				from = ofrom;
 				to = oto;
 			}
 		}
+		r_bitmap_free (bm);
 	}
 	if (rad == 'j') {
 		printf ("]\n");

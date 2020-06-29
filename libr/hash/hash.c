@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2007-2019 pancake */
+/* radare2 - LGPL - Copyright 2007-2020 pancake */
 
 #include <r_hash.h>
 #include "r_util.h"
@@ -111,6 +111,7 @@ static const struct {
 	{ /* CRC-64/XZ          */ "crc64xz", R_HASH_CRC64_XZ },
 	{ /* CRC-64/ISO         */ "crc64iso", R_HASH_CRC64_ISO },
 #endif /* #if R_HAVE_CRC64_EXTRA */
+	{ "gnu", R_HASH_GNU },
 	{ NULL, 0 }
 };
 
@@ -138,6 +139,14 @@ R_API int r_hash_parity(const ut8 *buf, ut64 len) {
 			((x & 8) ? 1 : 0) + ((x & 4) ? 1 : 0) + ((x & 2) ? 1 : 0) + ((x & 1) ? 1 : 0);
 	}
 	return ones % 2;
+}
+
+R_API ut32 r_hash_gnu(const ut8 *a, size_t len) {
+	ut32 h = 5381;
+	for (; *a && len--; a++) {
+		h = (h << 5) + h + *a;
+	}
+	return h;
 }
 
 /* These functions comes from 0xFFFF */
@@ -189,6 +198,7 @@ R_API const char *r_hash_name(ut64 bit) {
 	return "";
 }
 
+// XXX this API makes no sense to me
 R_API int r_hash_size(ut64 algo) {
 #define ALGOBIT(x)\
 	if (algo & R_HASH_##x) {\
@@ -290,6 +300,42 @@ R_API int r_hash_size(ut64 algo) {
 }
 
 /* Converts a comma separated list of names to the respective bit combination */
+R_API RBitmap *r_hash_name_to_bitmap(const char *name) {
+	r_return_val_if_fail (name, NULL);
+	RBitmap *bm = r_bitmap_new (128);
+	if (!bm) {
+		return NULL;
+	}
+	char tmp[128];
+	size_t i;
+	const char *ptr = name;
+
+	do {
+		/* Eat everything up to the comma */
+		for (i = 0; *ptr && *ptr != ',' && i < sizeof (tmp) - 1; i++) {
+ 			tmp[i] = tolower ((ut8)*ptr++);
+		}
+
+		/* Safety net */
+		tmp[i] = '\0';
+
+		for (i = 0; hash_name_bytes[i].name; i++) {
+			if (!strcmp (tmp, hash_name_bytes[i].name)) {
+				size_t bit = hash_name_bytes[i].bit;
+				r_bitmap_set (bm, bit);
+				break;
+			}
+		}
+
+		/* Skip the trailing comma, if any */
+		if (*ptr) {
+			ptr++;
+		}
+	} while (*ptr);
+	return bm;
+}
+
+// deprecated api
 R_API ut64 r_hash_name_to_bits(const char *name) {
 	char tmp[128];
 	int i;
@@ -347,11 +393,19 @@ R_API void r_hash_do_spice(RHash *ctx, ut64 algo, int loops, RHashSeed *seed) {
 }
 
 R_API char *r_hash_to_string(RHash *ctx, const char *name, const ut8 *data, int len) {
-	ut64 algo = r_hash_name_to_bits (name);
+	r_return_val_if_fail (ctx && name && data && len >= 0, NULL);
 	char *digest_hex = NULL;
 	RHash *myctx = NULL;
-	int i, digest_size;
-	if (!algo || !data) {
+	int digest_size;
+
+	RBitmap *bm = r_hash_name_to_bitmap (name);
+	if (!bm) {
+		return NULL;
+	}
+
+	r_bitmap_free (bm);
+	ut64 algo = r_hash_name_to_bits (name);
+	if (!algo) {
 		return NULL;
 	}
 	if (!ctx) {
@@ -369,6 +423,7 @@ R_API char *r_hash_to_string(RHash *ctx, const char *name, const ut8 *data, int 
 		} else {
 			digest_hex = malloc ((digest_size * 2) + 1);
 			if (digest_hex) {
+				size_t i;
 				for (i = 0; i < digest_size; i++) {
 					sprintf (digest_hex + (i * 2), "%02x", ctx->digest[i]);
 				}
