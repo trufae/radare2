@@ -308,7 +308,7 @@ CMDS=<<EOF
 e dir.projects = .tmp/
 Ps cannot > /dev/null
 Pd cannot > /dev/null
-Pl~cannot
+P~cannot
 
 EOF
 EXPECT=<<EOF
@@ -322,7 +322,7 @@ CMDS=<<EOF
 e dir.projects = .tmp/
 Ps erase > /dev/null
 P- erase > /dev/null
-Pl~erase
+P~erase
 EOF
 EXPECT=<<EOF
 EOF
@@ -335,7 +335,7 @@ CMDS=<<EOF
 e dir.projects = .tmp/
 Ps anesthetize > /dev/null
 Pd anesthetize > /dev/null
-Pl~blah
+P~blah
 ls -l `e dir.projects`~anesthetize
 EOF
 EXPECT=<<EOF
@@ -351,7 +351,7 @@ CMDS=<<EOF
 e dir.projects = .tmp/
 Ps lightbulb > /dev/null
 P- lightbulb > /dev/null
-Pl~lightbulb
+P~lightbulb
 ls -l `e dir.projects`~lightbulb
 EOF
 EXPECT=<<EOF
